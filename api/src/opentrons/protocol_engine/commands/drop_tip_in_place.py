@@ -44,8 +44,7 @@ class DropTipInPlaceResult(BaseModel):
 
 
 _ExecuteReturn = (
-    SuccessData[DropTipInPlaceResult, None]
-    | DefinedErrorData[TipPhysicallyAttachedError]
+    SuccessData[DropTipInPlaceResult] | DefinedErrorData[TipPhysicallyAttachedError]
 )
 
 
@@ -96,9 +95,7 @@ class DropTipInPlaceImplementation(
             state_update.update_pipette_tip_state(
                 pipette_id=params.pipetteId, tip_geometry=None
             )
-            return SuccessData(
-                public=DropTipInPlaceResult(), private=None, state_update=state_update
-            )
+            return SuccessData(public=DropTipInPlaceResult(), state_update=state_update)
 
 
 class DropTipInPlace(

@@ -40,7 +40,7 @@ class LoadLiquidResult(BaseModel):
 
 
 class LoadLiquidImplementation(
-    AbstractCommandImpl[LoadLiquidParams, SuccessData[LoadLiquidResult, None]]
+    AbstractCommandImpl[LoadLiquidParams, SuccessData[LoadLiquidResult]]
 ):
     """Load liquid command implementation."""
 
@@ -50,9 +50,7 @@ class LoadLiquidImplementation(
         self._state_view = state_view
         self._model_utils = model_utils
 
-    async def execute(
-        self, params: LoadLiquidParams
-    ) -> SuccessData[LoadLiquidResult, None]:
+    async def execute(self, params: LoadLiquidParams) -> SuccessData[LoadLiquidResult]:
         """Load data necessary for a liquid."""
         self._state_view.liquid.validate_liquid_id(params.liquidId)
 
@@ -67,9 +65,7 @@ class LoadLiquidImplementation(
             last_loaded=self._model_utils.get_timestamp(),
         )
 
-        return SuccessData(
-            public=LoadLiquidResult(), private=None, state_update=state_update
-        )
+        return SuccessData(public=LoadLiquidResult(), state_update=state_update)
 
 
 class LoadLiquid(BaseCommand[LoadLiquidParams, LoadLiquidResult, ErrorOccurrence]):
