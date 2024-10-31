@@ -34,6 +34,7 @@ import { selectors as labwareIngredSelectors } from '../../labware-ingred/select
 import { swatchColors } from '../../components/swatchColors'
 import { checkColor } from './utils'
 import { HandleEnter } from '../../atoms/HandleEnter'
+import { LINE_CLAMP_TEXT_STYLE } from '../../atoms'
 
 import type { ColorResult, RGBColor } from 'react-color'
 import type { ThunkDispatch } from 'redux-thunk'
@@ -173,7 +174,10 @@ export function DefineLiquidsModal(
           selectedIngredFields != null ? (
             <Flex gridGap={SPACING.spacing8}>
               <LiquidIcon color={initialValues.displayColor} />
-              <StyledText desktopStyle="bodyLargeSemiBold">
+              <StyledText
+                desktopStyle="bodyLargeSemiBold"
+                css={LINE_CLAMP_TEXT_STYLE(1)}
+              >
                 {initialValues.name}
               </StyledText>
             </Flex>
