@@ -45,6 +45,7 @@ from opentrons.protocols.api_support.util import (
     UnsupportedAPIError,
 )
 from opentrons_shared_data.errors.exceptions import CommandPreconditionViolated
+from opentrons.protocol_engine.errors import LabwareMovementNotAllowedError
 
 from ._types import OffDeckType
 from .core.common import ModuleCore, LabwareCore, ProtocolCore
@@ -668,7 +669,7 @@ class ProtocolContext(CommandPublisher):
         self,
         labware: Labware,
         new_location: Union[
-            DeckLocation, Labware, ModuleTypes, OffDeckType, WasteChute
+            DeckLocation, Labware, ModuleTypes, OffDeckType, WasteChute, TrashBin
         ],
         use_gripper: bool = False,
         pick_up_offset: Optional[Mapping[str, float]] = None,
@@ -727,11 +728,19 @@ class ProtocolContext(CommandPublisher):
             OffDeckType,
             DeckSlotName,
             StagingSlotName,
+            TrashBin,
         ]
         if isinstance(new_location, (Labware, ModuleContext)):
             location = new_location._core
         elif isinstance(new_location, (OffDeckType, WasteChute)):
             location = new_location
+        elif isinstance(new_location, TrashBin):
+            if labware._core.is_lid():
+                location = new_location
+            else:
+                raise LabwareMovementNotAllowedError(
+                    "Can only dispose of tips and Lid-type labware in a Trash Bin. Did you mean to use a Waste Chute?"
+                )
         else:
             location = validation.ensure_and_convert_deck_slot(
                 new_location, self._api_version, self._core.robot_type

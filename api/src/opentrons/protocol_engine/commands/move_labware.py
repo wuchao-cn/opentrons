@@ -22,7 +22,11 @@ from ..types import (
     LabwareOffsetVector,
     LabwareMovementOffsetData,
 )
-from ..errors import LabwareMovementNotAllowedError, NotSupportedOnRobotType
+from ..errors import (
+    LabwareMovementNotAllowedError,
+    NotSupportedOnRobotType,
+    LabwareOffsetDoesNotExistError,
+)
 from ..resources import labware_validation, fixture_validation
 from .command import (
     AbstractCommandImpl,
@@ -130,6 +134,7 @@ class MoveLabwareImplementation(AbstractCommandImpl[MoveLabwareParams, _ExecuteR
         )
         definition_uri = current_labware.definitionUri
         post_drop_slide_offset: Optional[Point] = None
+        trash_lid_drop_offset: Optional[LabwareOffsetVector] = None
 
         if self._state_view.labware.is_fixed_trash(params.labwareId):
             raise LabwareMovementNotAllowedError(
@@ -138,9 +143,11 @@ class MoveLabwareImplementation(AbstractCommandImpl[MoveLabwareParams, _ExecuteR
 
         if isinstance(params.newLocation, AddressableAreaLocation):
             area_name = params.newLocation.addressableAreaName
-            if not fixture_validation.is_gripper_waste_chute(
-                area_name
-            ) and not fixture_validation.is_deck_slot(area_name):
+            if (
+                not fixture_validation.is_gripper_waste_chute(area_name)
+                and not fixture_validation.is_deck_slot(area_name)
+                and not fixture_validation.is_trash(area_name)
+            ):
                 raise LabwareMovementNotAllowedError(
                     f"Cannot move {current_labware.loadName} to addressable area {area_name}"
                 )
@@ -162,6 +169,32 @@ class MoveLabwareImplementation(AbstractCommandImpl[MoveLabwareParams, _ExecuteR
                     y=0,
                     z=0,
                 )
+            elif fixture_validation.is_trash(area_name):
+                # When dropping labware in the trash bins we want to ensure they are lids
+                # and enforce a y-axis drop offset to ensure they fall within the trash bin
+                if labware_validation.validate_definition_is_lid(
+                    self._state_view.labware.get_definition(params.labwareId)
+                ):
+                    lid_disposable_offfets = (
+                        current_labware_definition.gripperOffsets.get(
+                            "lidDisposalOffsets"
+                        )
+                    )
+                    if lid_disposable_offfets is not None:
+                        trash_lid_drop_offset = LabwareOffsetVector(
+                            x=lid_disposable_offfets.dropOffset.x,
+                            y=lid_disposable_offfets.dropOffset.y,
+                            z=lid_disposable_offfets.dropOffset.z,
+                        )
+                    else:
+                        raise LabwareOffsetDoesNotExistError(
+                            f"Labware Definition {current_labware.loadName} does not contain required field 'lidDisposalOffsets' of 'gripperOffsets'."
+                        )
+                else:
+                    raise LabwareMovementNotAllowedError(
+                        "Can only move labware with allowed role 'Lid' to a Trash Bin."
+                    )
+
         elif isinstance(params.newLocation, DeckSlotLocation):
             self._state_view.addressable_areas.raise_if_area_not_in_deck_configuration(
                 params.newLocation.slotName.id
@@ -231,6 +264,9 @@ class MoveLabwareImplementation(AbstractCommandImpl[MoveLabwareParams, _ExecuteR
                 pickUpOffset=params.pickUpOffset or LabwareOffsetVector(x=0, y=0, z=0),
                 dropOffset=params.dropOffset or LabwareOffsetVector(x=0, y=0, z=0),
             )
+
+            if trash_lid_drop_offset:
+                user_offset_data.dropOffset += trash_lid_drop_offset
 
             try:
                 # Skips gripper moves when using virtual gripper
