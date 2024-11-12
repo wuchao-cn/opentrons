@@ -10,6 +10,7 @@ import {
   OPENTRONS_OT2,
   OPENTRONS_FLEX,
   FLEX_GRIPPER,
+  NO_PIPETTES,
 } from '../../organisms/InstrumentsSection'
 import type { UseFormWatch } from 'react-hook-form'
 import type { CreateProtocolFormData } from '../../pages/CreateProtocol'
@@ -49,8 +50,11 @@ export function generatePromptPreviewInstrumentItems(
 
   if (pipettes === TWO_PIPETTES || robot === OPENTRONS_OT2) {
     leftPipette !== '' &&
+      leftPipette !== NO_PIPETTES &&
       items.push(getPipetteSpecsV2(leftPipette as PipetteName)?.displayName)
+
     rightPipette !== '' &&
+      rightPipette !== NO_PIPETTES &&
       items.push(getPipetteSpecsV2(rightPipette as PipetteName)?.displayName)
   } else {
     items.push(pipettes !== '' && t(pipettes))
@@ -100,6 +104,18 @@ export function generatePromptPreviewLabwareLiquidsItems(
   return items.filter(Boolean)
 }
 
+export function generatePromptPreviewStepsItems(
+  watch: UseFormWatch<CreateProtocolFormData>,
+  t: any
+): string[] {
+  const { steps } = watch()
+
+  if (steps === undefined || steps?.length === 0) return []
+  if (typeof steps === 'string') return [steps]
+
+  return steps.filter(Boolean)
+}
+
 export function generatePromptPreviewData(
   watch: UseFormWatch<CreateProtocolFormData>,
   t: any
@@ -123,6 +139,10 @@ export function generatePromptPreviewData(
     {
       title: t('labware_liquids_title'),
       items: generatePromptPreviewLabwareLiquidsItems(watch, t),
+    },
+    {
+      title: t('steps_title'),
+      items: generatePromptPreviewStepsItems(watch, t),
     },
   ]
 }

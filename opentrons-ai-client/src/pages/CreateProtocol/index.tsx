@@ -31,6 +31,7 @@ export interface CreateProtocolFormData {
   modules: DisplayModules[]
   labwares: DisplayLabware[]
   liquids: string[]
+  steps: string[] | string
 }
 
 const TOTAL_STEPS = 5
@@ -50,6 +51,8 @@ export function CreateProtocol(): JSX.Element | null {
       instruments: {},
       modules: [],
       labwares: [],
+      liquids: [''],
+      steps: [''],
     },
   })
 
@@ -94,6 +97,7 @@ export function CreateProtocol(): JSX.Element | null {
           handleSubmit={function (): void {
             throw new Error('Function not implemented.')
           }}
+          isSubmitButtonEnabled={currentStep === TOTAL_STEPS}
           promptPreviewData={generatePromptPreviewData(methods.watch, t)}
         />
       </Flex>
