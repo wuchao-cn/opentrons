@@ -7,6 +7,7 @@ import type {
   createProtocolAtomProps,
   HeaderWithMeterAtomProps,
   Mixpanel,
+  UpdatePrompt,
 } from './types'
 
 /** ChatDataAtom is for chat data (user prompt and response from OpenAI API) */
@@ -16,6 +17,15 @@ export const chatDataAtom = atom<ChatData[]>([])
 export const chatPromptAtom = atom<ChatPromptAtomProps>({
   prompt: '',
   isNewProtocol: true,
+})
+
+export const updatePromptAtom = atom<UpdatePrompt>({
+  protocol_text: '',
+  regenerate: false,
+  update_type: 'adapt_python_protocol',
+  update_details: '',
+  fake: false,
+  fake_id: 0,
 })
 
 /** Scroll to bottom of chat atom */

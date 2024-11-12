@@ -21,6 +21,7 @@ import {
   chatHistoryAtom,
   chatPromptAtom,
   tokenAtom,
+  updatePromptAtom,
 } from '../../resources/atoms'
 import { useApiCall } from '../../resources/hooks'
 import { calcTextAreaHeight } from '../../resources/utils'
@@ -28,6 +29,12 @@ import {
   STAGING_END_POINT,
   PROD_END_POINT,
   LOCAL_END_POINT,
+  LOCAL_UPDATE_PROTOCOL_END_POINT,
+  PROD_UPDATE_PROTOCOL_END_POINT,
+  STAGING_UPDATE_PROTOCOL_END_POINT,
+  LOCAL_CREATE_PROTOCOL_END_POINT,
+  PROD_CREATE_PROTOCOL_END_POINT,
+  STAGING_CREATE_PROTOCOL_END_POINT,
 } from '../../resources/constants'
 
 import type { AxiosRequestConfig } from 'axios'
@@ -37,25 +44,27 @@ export function InputPrompt(): JSX.Element {
   const { t } = useTranslation('protocol_generator')
   const { register, watch, reset, setValue } = useFormContext()
   const [chatPromptAtomValue] = useAtom(chatPromptAtom)
+  const [updatePrompt] = useAtom(updatePromptAtom)
   const [, setChatData] = useAtom(chatDataAtom)
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom)
   const [token] = useAtom(tokenAtom)
   const [submitted, setSubmitted] = useState<boolean>(false)
-  const userPrompt = watch('userPrompt') ?? ''
+  const watchUserPrompt = watch('userPrompt') ?? ''
+  const [sendAutoFilledPrompt, setSendAutoFilledPrompt] = useState<boolean>(
+    false
+  )
   const { data, isLoading, callApi } = useApiCall()
   const [requestId, setRequestId] = useState<string>(uuidv4())
 
-  // This is to autofill the input field for when we navigate to the chat page from the existing/new protocol generator pages
-  useEffect(() => {
-    setValue('userPrompt', chatPromptAtomValue.prompt)
-  }, [chatPromptAtomValue, setValue])
+  const handleClick = async (
+    isUpdateOrCreate: boolean = false
+  ): Promise<void> => {
+    setRequestId(uuidv4() + getPreFixText(isUpdateOrCreate))
 
-  const handleClick = async (): Promise<void> => {
-    setRequestId(uuidv4())
     const userInput: ChatData = {
       requestId,
       role: 'user',
-      reply: userPrompt,
+      reply: watchUserPrompt,
     }
     reset()
     setChatData(chatData => [...chatData, userInput])
@@ -66,32 +75,26 @@ export function InputPrompt(): JSX.Element {
         'Content-Type': 'application/json',
       }
 
-      const getEndpoint = (): string => {
-        switch (process.env.NODE_ENV) {
-          case 'production':
-            return PROD_END_POINT
-          case 'development':
-            return LOCAL_END_POINT
-          default:
-            return STAGING_END_POINT
-        }
-      }
-
-      const url = getEndpoint()
+      const url = isUpdateOrCreate
+        ? getCreateOrUpdateEndpoint(chatPromptAtomValue.isNewProtocol)
+        : getChatEndpoint()
 
       const config = {
         url,
         method: 'POST',
         headers,
-        data: {
-          message: userPrompt,
-          history: chatHistory,
-          fake: false,
-        },
+        data: isUpdateOrCreate
+          ? getUpdateOrCreatePrompt()
+          : {
+              message: watchUserPrompt,
+              history: chatHistory,
+              fake: false,
+            },
       }
+
       setChatHistory(chatHistory => [
         ...chatHistory,
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: watchUserPrompt },
       ])
       await callApi(config as AxiosRequestConfig)
       setSubmitted(true)
@@ -99,6 +102,10 @@ export function InputPrompt(): JSX.Element {
       console.error(`error: ${err.message}`)
       throw err
     }
+  }
+
+  const getUpdateOrCreatePrompt = (): any => {
+    return chatPromptAtomValue.isNewProtocol ? updatePrompt : updatePrompt // to do: add the create prompt
   }
 
   useEffect(() => {
@@ -118,16 +125,31 @@ export function InputPrompt(): JSX.Element {
     }
   }, [data, isLoading, submitted])
 
+  // This is to autofill the input field for when we navigate to the chat page from the existing/new protocol generator pages
+  useEffect(() => {
+    if (chatPromptAtomValue.prompt !== '') {
+      setValue('userPrompt', chatPromptAtomValue.prompt)
+      setSendAutoFilledPrompt(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (sendAutoFilledPrompt) {
+      handleClick(true)
+      setSendAutoFilledPrompt(false)
+    }
+  }, [watchUserPrompt])
+
   return (
     <StyledForm id="User_Prompt">
       <Flex css={CONTAINER_STYLE}>
         <LegacyStyledTextarea
-          rows={calcTextAreaHeight(userPrompt as string)}
+          rows={calcTextAreaHeight(watchUserPrompt as string)}
           placeholder={t('type_your_prompt')}
           {...register('userPrompt')}
         />
         <SendButton
-          disabled={userPrompt.length === 0}
+          disabled={watchUserPrompt.length === 0}
           isLoading={isLoading}
           handleClick={() => {
             handleClick()
@@ -136,6 +158,55 @@ export function InputPrompt(): JSX.Element {
       </Flex>
     </StyledForm>
   )
+
+  function getPreFixText(isUpdateOrCreate: boolean): string {
+    let appendCreateOrUpdate = ''
+    if (isUpdateOrCreate) {
+      if (chatPromptAtomValue.isNewProtocol) {
+        appendCreateOrUpdate = 'NewProtocol'
+      } else {
+        appendCreateOrUpdate = 'UpdateProtocol'
+      }
+    }
+    return appendCreateOrUpdate
+  }
+}
+
+const getCreateOrUpdateEndpoint = (isCreateNewProtocol: boolean): string => {
+  return isCreateNewProtocol ? getCreateEndpoint() : getUpdateEndpoint()
+}
+
+const getChatEndpoint = (): string => {
+  switch (process.env.NODE_ENV) {
+    case 'production':
+      return PROD_END_POINT
+    case 'development':
+      return LOCAL_END_POINT
+    default:
+      return STAGING_END_POINT
+  }
+}
+
+const getCreateEndpoint = (): string => {
+  switch (process.env.NODE_ENV) {
+    case 'production':
+      return PROD_CREATE_PROTOCOL_END_POINT
+    case 'development':
+      return LOCAL_CREATE_PROTOCOL_END_POINT
+    default:
+      return STAGING_CREATE_PROTOCOL_END_POINT
+  }
+}
+
+const getUpdateEndpoint = (): string => {
+  switch (process.env.NODE_ENV) {
+    case 'production':
+      return PROD_UPDATE_PROTOCOL_END_POINT
+    case 'development':
+      return LOCAL_UPDATE_PROTOCOL_END_POINT
+    default:
+      return STAGING_UPDATE_PROTOCOL_END_POINT
+  }
 }
 
 const StyledForm = styled.form`
