@@ -1,11 +1,15 @@
 """Tests for SQL tables."""
 
 
+from pathlib import Path
 from typing import List, cast
 
 import pytest
 import sqlalchemy
 
+from robot_server.persistence.database import sql_engine_ctx
+from robot_server.persistence.file_and_directory_names import DB_FILE
+from robot_server.persistence.persistence_directory import make_migration_orchestrator
 from robot_server.persistence.tables import (
     metadata as latest_metadata,
     schema_3,
@@ -562,12 +566,14 @@ def _normalize_statement(statement: str) -> str:
         (schema_2.metadata, EXPECTED_STATEMENTS_V2),
     ],
 )
-def test_creating_tables_emits_expected_statements(
+def test_creating_from_metadata_emits_expected_statements(
     metadata: sqlalchemy.MetaData, expected_statements: List[str]
 ) -> None:
-    """Test that fresh databases are created with the expected statements.
+    """Test that each schema compiles down to the expected SQL statements.
 
     This is a snapshot test to help catch accidental changes to our SQL schema.
+    For example, we might refactor the way we define the schema on the Python side,
+    but we probably expect the way that it compiles down to SQL to stay stable.
 
     Based on:
     https://docs.sqlalchemy.org/en/14/faq/metadata_schema.html#faq-ddl-as-string
@@ -582,6 +588,53 @@ def test_creating_tables_emits_expected_statements(
 
     engine = sqlalchemy.create_mock_engine("sqlite://", record_statement)
     metadata.create_all(cast(sqlalchemy.engine.Engine, engine))
+
+    normalized_actual = [_normalize_statement(s) for s in actual_statements]
+    normalized_expected = [_normalize_statement(s) for s in expected_statements]
+
+    # Compare ignoring order. SQLAlchemy appears to emit CREATE INDEX statements in a
+    # nondeterministic order that varies across runs. Although statement order
+    # theoretically matters, it's unlikely to matter in practice for our purposes here.
+    assert set(normalized_actual) == set(normalized_expected)
+
+
+# FIXME(mm, 2024-11-12): https://opentrons.atlassian.net/browse/EXEC-827
+#
+# There are at least these mismatches:
+#
+# - `ix_data_files_source` is present in metadata, but not emitted by the migration path
+# - `ix_run_command_command_intent` is present in metadata, but not emitted by the migration path
+# - `data_files.source` is nullable as emitted by the migration path, but not as declared in metadata
+# - `command.command_intent` is nullable as emitted by the migration path, but not as declared in metadata
+# - constraint `datafilesourcesqlenum` is present in metadata, but not not emitted by the migration path
+#
+# Remove this xfail mark when the mismatches are resolved.
+@pytest.mark.xfail(strict=True)
+def test_migrated_db_matches_db_created_from_metadata(tmp_path: Path) -> None:
+    """Test that the output of migration matches `metadata.create_all()`.
+
+    In other words, constructing the database by going through our migration system
+    should have the same final result as if we created the database directly from
+    the latest schema version.
+
+    This prevents migrations from sneaking in arbitrary changes and causing the actual
+    database to not exactly match what our SQLAlchemy `metadata` object declares.
+    """
+    migration_orchestrator = make_migration_orchestrator(prepared_root=tmp_path)
+    active_subdirectory = migration_orchestrator.migrate_to_latest()
+
+    expected_statements = EXPECTED_STATEMENTS_LATEST
+
+    with sql_engine_ctx(
+        active_subdirectory / DB_FILE
+    ) as sql_engine, sql_engine.begin() as transaction:
+        actual_statements = (
+            transaction.execute(
+                sqlalchemy.text("SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL")
+            )
+            .scalars()
+            .all()
+        )
 
     normalized_actual = [_normalize_statement(s) for s in actual_statements]
     normalized_expected = [_normalize_statement(s) for s in expected_statements]
